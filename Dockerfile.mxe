@@ -1,0 +1,14 @@
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    make perl python3 python-is-python3 ruby sed libxml-parser-perl \
+    pkg-config cmake ninja-build git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY mxe-usr /opt/mxe/usr
+
+ENV PATH=/opt/mxe/usr/bin:$PATH
+WORKDIR /srv
+
+CMD ["bash"]

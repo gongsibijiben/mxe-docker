@@ -1,0 +1,48 @@
+#!/bin/bash
+# MXE + Qt6 cross-compile script
+# Target: x86_64-w64-mingw32.shared (64-bit Windows, shared libs)
+# Qt modules: qtbase qttools qtdeclarative qtimageformats qtsvg qttranslations
+set -u
+
+MXE_DIR=/opt/mxe
+TARGET=x86_64-w64-mingw32.shared
+JOBS=$(nproc)
+
+cd "$MXE_DIR" || { echo "FATAL: $MXE_DIR not found"; exit 1; }
+
+build_module() {
+    local mod=$1
+    echo "============================================"
+    echo "Building: $mod ($TARGET, $JOBS jobs)"
+    echo "============================================"
+    set +e
+    make "$mod" MXE_TARGETS="$TARGET" JOBS="$JOBS"
+    local rc=$?
+    set -e
+    rm -rf "$MXE_DIR/tmp-*"
+    if [ $rc -ne 0 ]; then
+        echo "WARNING: $mod failed (exit $rc) — continuing"
+        echo "Full log: $MXE_DIR/log/${mod}_${TARGET}"
+        return 1
+    fi
+    echo "OK: $mod done"
+    return 0
+}
+
+# Toolchain first (cc) — required by everything
+build_module cc || { echo "FATAL: toolchain (cc) failed"; exit 2; }
+
+# Qt base + core modules — non-fatal individually, but qtbase is critical
+build_module qtbase || { echo "FATAL: qtbase failed — cannot continue"; exit 3; }
+build_module qttools
+build_module qtdeclarative
+build_module qtimageformats
+build_module qtsvg
+build_module qttranslations
+
+# Cleanup build artifacts (keep log/ for artifact upload, keep usr/ for image)
+rm -rf "$MXE_DIR/pkg" "$MXE_DIR/.git"
+
+echo "============================================"
+echo "MXE + Qt6 build finished. Output: $MXE_DIR/usr"
+echo "============================================"
