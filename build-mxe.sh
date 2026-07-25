@@ -32,6 +32,14 @@ build_module() {
 # Toolchain first (cc) — required by everything
 build_module cc || { echo "FATAL: toolchain (cc) failed"; exit 2; }
 
+# Meson wrapper — required by fontconfig/freetype/etc. (Qt6 deps)
+build_module meson-wrapper || { echo "FATAL: meson-wrapper failed"; exit 2; }
+
+# Qt base core deps — pre-build to surface failures early and warm cache
+for dep in freetype fontconfig harfbuzz openssl pcre2 dbus icu4c; do
+    build_module "$dep"
+done
+
 # Qt base + core modules — non-fatal individually, but qtbase is critical
 build_module qtbase || { echo "FATAL: qtbase failed — cannot continue"; exit 3; }
 build_module qttools
