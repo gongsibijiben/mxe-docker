@@ -1,6 +1,7 @@
 # Dockerfile for Qt6 + MinGW-w64 cross-compile environment
 # Provides Qt 6.8.3 (MinGW prebuilt via aqtinstall) + MinGW-w64 toolchain + CMake/Ninja
 # Used to cross-compile FinceptTerminal (Qt6 C++ project) to a Windows .exe on Linux.
+# Python is managed entirely by uv (no system python3) to avoid path conflicts.
 
 FROM ubuntu:22.04
 
@@ -10,17 +11,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
     QT_ARCH=win64_mingw \
     QT_MODULES="qtcharts qtmultimedia qtwebsockets qtsvg qtimageformats qttools qttranslations" \
     QT_INSTALL_DIR=/opt/Qt \
-    MINGW_PREFIX=x86_64-w64-mingw32 \
-    # PATH is overwritten again below after uv + venv are installed
-    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    MINGW_PREFIX=x86_64-w64-mingw32
 
 # ── System packages ──────────────────────────────────────────────────────────
 # MinGW-w64 toolchain (gcc 12.x on Ubuntu 22.04, satisfies FinceptTerminal's GCC >= 12.3 requirement)
-# + build tools + extra libs commonly needed by Qt apps
+# + build tools + extra libs commonly needed by Qt apps.
+# NOTE: python3 / pip are deliberately NOT installed — Python is managed via uv only.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf automake autopoint bash bison bzip2 flex g++ gcc gettext git gperf \
         intltool libc6-dev libgdk-pixbuf2.0-dev libltdl-dev libssl-dev libtool \
-        libtool-bin make patch pkg-config python3 python3-pip python-is-python3 \
+        libtool-bin make patch pkg-config \
         unzip wget xz-utils cmake ninja-build lzip ca-certificates curl file \
         mingw-w64 mingw-w64-common mingw-w64-tools g++-mingw-w64-x86-64 \
         gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 \
@@ -31,45 +31,48 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         p7zip-full rsync ssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# ── uv: fast Python package manager (Astral, Rust) via CNB mirror ────────────
-# Use uv to manage a dedicated Python env for aqtinstall. Avoids Ubuntu 22.04's
-# broken pip install scheme (/usr/local vs /usr/lib search path mismatch).
+# ── uv: fast Python package manager via CNB China mirror ────────────────────
 # Mirrors per https://blog.csdn.net/dinofish/article/details/163030528:
-#   - uv install script:    https://cnrio.cn/install.sh
-#   - uv release tarball:   https://cnb.cool/astral-sh/uv/-/releases/download/latest/...
-#   - Python interpreter:   https://cnb.cool/astral-sh/python-build-standalone/-/releases/download
-#   - Astral metadata index: https://cnrio.cn/
+#   uv install script:    https://cnrio.cn/install.sh
+#   Python interpreter:   https://cnb.cool/astral-sh/python-build-standalone/-/releases/download
+#   Astral metadata:      https://cnrio.cn/
+#   PyPI:                 https://pypi.tuna.tsinghua.edu.cn/simple
+#   Qt mirrors:           https://mirrors.tuna.tsinghua.edu.cn/qt/
+#
 # uv installer puts binary in $HOME/.local/bin which is NOT on Docker's RUN PATH,
 # so we append it inline before invoking uv.
+
 RUN curl -LsSf https://cnrio.cn/install.sh | sh \
     && export PATH="$HOME/.local/bin:$PATH" \
     && uv --version
 
-# Persist ~/.local/bin on PATH for subsequent RUN layers + final CMD
-ENV PATH=/root/.local/bin:/opt/venv/bin:/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw1310_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-# Configure uv to use China mirrors for everything (Python downloads + Astral index)
 ENV UV_PYTHON_INSTALL_MIRROR=https://cnb.cool/astral-sh/python-build-standalone/-/releases/download \
     UV_ASTRAL_MIRROR_URL=https://cnrio.cn/ \
     UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
     AQT_BASE=https://mirrors.tuna.tsinghua.edu.cn/qt/
 
-# ── aqtinstall: install into an isolated uv-managed env at /opt/venv ─────────
-# `uv venv` creates a self-contained interpreter with a clean sys.path.
-# CRITICAL: `uv pip install --python <venv>` defaults to uv's own tool env,
-# NOT the venv — packages end up invisible to the venv's python. Use --target
-# to force install into the venv's site-packages so `import aqtinstall` works.
-RUN uv venv /opt/venv --python 3.13 \
-    && VENV_SITE=$(/opt/venv/bin/python -c "import sys; print([p for p in sys.path if 'site-packages' in p][0])") \
-    && /opt/venv/bin/python -c "import sys; print('python', sys.version)" \
-    && uv pip install --target "${VENV_SITE}" aqtinstall==3.1.* \
-    && /opt/venv/bin/python -c "import aqtinstall; print('aqtinstall', aqtinstall.__version__)"
+# ── Install standalone Python 3.13 + create venv via uv ──────────────────────
+# uv python install pulls a prebuilt CPython from the CNB mirror (fast in China).
+# The venv is a self-contained environment that has zero dependencies on system Python.
+# VIRTUAL_ENV tells `uv pip install` which venv to target (docs.astral.sh/uv/pip/environments).
+RUN export PATH="$HOME/.local/bin:$PATH" \
+    && uv python install 3.13 \
+    && uv venv /opt/venv --python 3.13 \
+    && /opt/venv/bin/python -c "import sys; print('Python', sys.version)"
 
-ENV PATH=/opt/venv/bin:/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw1310_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# VIRTUAL_ENV + PATH are persisted via ENV so all subsequent RUN layers
+# and the final CMD use the venv's Python as the default.
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ── aqtinstall: install into the uv-managed venv via VIRTUAL_ENV ─────────────
+# With VIRTUAL_ENV set, `uv pip install` automatically targets /opt/venv's site-packages.
+# No --target or --python needed — uv reads VIRTUAL_ENV per its own docs.
+RUN uv pip install aqtinstall==3.1.* \
+    && python -c "import aqtinstall; print('aqtinstall', aqtinstall.__version__)"
 
 # ── Install Qt 6.8.3 + MinGW toolchain + required modules ────────────────────
-# AQT_BASE points aqtinstall at the Tsinghua TUNA Qt mirror for fast downloads
-# from inside China. Falls back to official mirror if a module is missing there.
+# AQT_BASE points aqtinstall at the Tsinghua TUNA Qt mirror for fast downloads.
 RUN mkdir -p "${QT_INSTALL_DIR}" \
     && cd "${QT_INSTALL_DIR}" \
     && python -m aqtinstall qt windows "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
