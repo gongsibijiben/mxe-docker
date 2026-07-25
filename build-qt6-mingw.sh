@@ -52,7 +52,8 @@ err()  { printf '\033[1;31m[qt6-mingw] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || err "python3 is required"
 python3 -c "import aqtinstall" 2>/dev/null || {
     log "aqtinstall not found, installing..."
-    python3 -m pip install --break-system-packages 'aqtinstall==3.1.*'
+    python3 -m pip install --upgrade pip
+    python3 -m pip install 'aqtinstall==3.1.*'
 }
 
 # ── Idempotency check ────────────────────────────────────────────────────────
