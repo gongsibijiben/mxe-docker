@@ -1,0 +1,56 @@
+# Dockerfile for Qt6 + MinGW-w64 cross-compile environment
+# Provides Qt 6.8.3 (MinGW prebuilt via aqtinstall) + MinGW-w64 toolchain + CMake/Ninja
+# Used to cross-compile FinceptTerminal (Qt6 C++ project) to a Windows .exe on Linux.
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    QT_VERSION=6.8.3 \
+    QT_HOST=windows \
+    QT_ARCH=win64_mingw \
+    QT_MODULES="qtcharts qtmultimedia qtwebsockets qtsvg qtimageformats qttools qttranslations" \
+    QT_INSTALL_DIR=/opt/Qt \
+    MINGW_PREFIX=x86_64-w64-mingw32 \
+    PATH=/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw112_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# ── System packages ──────────────────────────────────────────────────────────
+# MinGW-w64 toolchain (gcc 12.x on Ubuntu 22.04, satisfies FinceptTerminal's GCC >= 12.3 requirement)
+# + build tools + extra libs commonly needed by Qt apps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        autoconf automake autopoint bash bison bzip2 flex g++ gcc gettext git gperf \
+        intltool libc6-dev libgdk-pixbuf2.0-dev libltdl-dev libssl-dev libtool \
+        libtool-bin make patch pkg-config python3 python3-pip python-is-python3 \
+        unzip wget xz-utils cmake ninja-build lzip ca-certificates curl file \
+        mingw-w64 mingw-w64-common mingw-w64-tools g++-mingw-w64-x86-64 \
+        gcc-mingw-w64-x86-64 binutils-mingw-w64-x86-64 \
+        libgl1-mesa-dev libglu1-mesa-dev libfontconfig1-dev libfreetype6-dev \
+        libx11-dev libxext-dev libxfixes-dev libxrender-dev libxi-dev libxkbcommon-dev \
+        libxkbcommon-x11-dev libxcb1-dev libx11-xcb-dev libxcb-cursor-dev \
+        libdbus-1-dev libicu-dev libpng-dev libjpeg-dev zlib1g-dev libharfbuzz-dev \
+        p7zip-full rsync ssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── aqtinstall: fast Qt installer (uses official Qt mirrors) ─────────────────
+RUN pip3 install --break-system-packages aqtinstall==3.1.* \
+    && python3 -m aqtinstall aqt --version
+
+# ── Install Qt 6.8.3 + MinGW toolchain + required modules ────────────────────
+# Uses the official aqtinstall CLI; falls back to mirror arg if the default mirror is slow.
+RUN mkdir -p "${QT_INSTALL_DIR}" \
+    && cd "${QT_INSTALL_DIR}" \
+    && python3 -m aqtinstall qt windows "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
+    && python3 -m aqtinstall tool windows tools_mingw1310 1.0.0 qt.tools.mingw1310.64 \
+    && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/bin/qmake6.exe" \
+    && ls "${QT_INSTALL_DIR}/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe"
+
+# ── Default workspace ────────────────────────────────────────────────────────
+WORKDIR /srv
+
+# Print toolchain info on entry for quick verification
+RUN echo '#!/bin/bash' > /usr/local/bin/qtinfo \
+    && echo 'echo "=== Qt version ==="; "/opt/Qt/6.8.3/mingw_64/bin/qmake6.exe" -v 2>/dev/null || true' >> /usr/local/bin/qtinfo \
+    && echo 'echo "=== MinGW g++ ==="; "/opt/Qt/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe" --version 2>/dev/null | head -1' >> /usr/local/bin/qtinfo \
+    && echo 'echo "=== Qt modules installed ==="; ls /opt/Qt/6.8.3/mingw_64/lib/cmake/ | head -30' >> /usr/local/bin/qtinfo \
+    && chmod +x /usr/local/bin/qtinfo
+
+CMD ["bash"]

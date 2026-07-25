@@ -1,0 +1,61 @@
+name: Build Qt6 MinGW Docker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-qt6-mingw.yml'
+      - 'Dockerfile.qt6-mingw'
+      - 'build-qt6-mingw.sh'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          df -h /
+
+      - name: Lowercase image name
+        run: echo "IMAGE=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Aliyun ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ALIYUN_REGISTRY }}
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.qt6-mingw
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE }}-qt6-mingw:latest
+            ghcr.io/${{ env.IMAGE }}-qt6-mingw:sha-${{ github.sha }}
+            ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAMESPACE }}/qt6-mingw-docker:latest
+            ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAMESPACE }}/qt6-mingw-docker:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
