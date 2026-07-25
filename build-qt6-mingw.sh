@@ -52,9 +52,10 @@ err()  { printf '\033[1;31m[qt6-mingw] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || err "python3 is required"
 python3 -c "import aqtinstall" 2>/dev/null || {
     log "aqtinstall not found, installing..."
-    # Do NOT upgrade pip on Ubuntu 22.04: it splits install location from
-    # python3's search path, causing "No module named aqtinstall".
-    python3 -m pip install 'aqtinstall==3.1.*'
+    # Ubuntu 22.04 default pip scheme puts packages in /usr/local/... which
+    # python3 doesn't search. --prefix=/usr forces install into the system
+    # interpreter's path (/usr/lib/python3/dist-packages).
+    python3 -m pip install --prefix=/usr 'aqtinstall==3.1.*'
 }
 # ── Idempotency check ────────────────────────────────────────────────────────
 QT_BIN="${QT_INSTALL_DIR}/${QT_VERSION}/mingw_64/bin"
