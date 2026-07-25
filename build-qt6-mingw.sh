@@ -43,14 +43,14 @@ export UV_PIP_INDEX_URL="${UV_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/s
 export AQT_BASE="${AQT_BASE:-https://mirrors.tuna.tsinghua.edu.cn/qt/}"
 
 # Required modules for FinceptTerminal
+# NOTE: qtsvg / qttools / qttranslations are NOT separate modules in Qt 6.8.3
+# win64_mingw — they are built into qtbase. Verified via:
+#   python -m aqt list-qt windows desktop --modules 6.8.3 win64_mingw
 QT_MODULES=(
     qtcharts
     qtmultimedia
     qtwebsockets
-    qtsvg
     qtimageformats
-    qttools
-    qttranslations
 )
 
 # ── Logging helpers ──────────────────────────────────────────────────────────

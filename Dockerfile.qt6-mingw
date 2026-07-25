@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     QT_VERSION=6.8.3 \
     QT_HOST=windows \
     QT_ARCH=win64_mingw \
-    QT_MODULES="qtcharts qtmultimedia qtwebsockets qtsvg qtimageformats qttools qttranslations" \
+    QT_MODULES="qtcharts qtmultimedia qtwebsockets qtimageformats" \
     QT_INSTALL_DIR=/opt/Qt \
     MINGW_PREFIX=x86_64-w64-mingw32
 
