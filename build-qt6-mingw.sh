@@ -104,11 +104,11 @@ if [[ -n "${QT_MIRROR:-}" ]]; then
     AQT_ARGS+=(--base "${QT_MIRROR}")
 fi
 
-VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqtinstall "${AQT_ARGS[@]}"
+VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt "${AQT_ARGS[@]}"
 
 # ── Install MinGW 13.1.0 toolchain ───────────────────────────────────────────
 log "Installing MinGW toolchain (${QT_MINGW_TOOL})"
-VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqtinstall install-tool "${QT_HOST}" "${QT_MINGW_TOOL}" qt.tools.${QT_MINGW_TOOL}
+VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt install-tool "${QT_HOST}" "${QT_MINGW_TOOL}" qt.tools.${QT_MINGW_TOOL}
 
 # ── Verify installation ──────────────────────────────────────────────────────
 QMAKE="${QT_BIN}/qmake6.exe"
