@@ -68,8 +68,10 @@ ENV VIRTUAL_ENV=/opt/venv \
 # ── aqtinstall: install into the uv-managed venv via VIRTUAL_ENV ─────────────
 # With VIRTUAL_ENV set, `uv pip install` automatically targets /opt/venv's site-packages.
 # No --target or --python needed — uv reads VIRTUAL_ENV per its own docs.
+# NOTE: PyPI package name is "aqtinstall", but the Python module is "aqt".
+# CLI entry point (python -m aqtinstall) works independently.
 RUN uv pip install aqtinstall==3.1.* \
-    && python -c "import aqtinstall; print('aqtinstall', aqtinstall.__version__)"
+    && python -c "import aqt; print('aqt', aqt.__version__)"
 
 # ── Install Qt 6.8.3 + MinGW toolchain + required modules ────────────────────
 # AQT_BASE points aqtinstall at the Tsinghua TUNA Qt mirror for fast downloads.

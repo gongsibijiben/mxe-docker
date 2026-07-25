@@ -80,11 +80,11 @@ VENV_PY="${VENV_DIR}/bin/python"
 # ── Install aqtinstall via uv into the venv (VIRTUAL_ENV required) ───────────
 # uv pip install reads VIRTUAL_ENV to determine the target environment.
 # Without it, uv may install into a different location.
-if ! "${VENV_PY}" -c "import aqtinstall" 2>/dev/null; then
+if ! "${VENV_PY}" -c "import aqt" 2>/dev/null; then
     log "Installing aqtinstall into ${VENV_DIR} (VIRTUAL_ENV=${VENV_DIR})"
     VIRTUAL_ENV="${VENV_DIR}" uv pip install aqtinstall==3.1.*
 fi
-log "aqtinstall: $("${VENV_PY}" -c 'import aqtinstall; print(aqtinstall.__version__)')"
+log "aqt: $("${VENV_PY}" -c 'import aqt; print(aqt.__version__)')"
 
 # ── Idempotency check ────────────────────────────────────────────────────────
 QT_BIN="${QT_INSTALL_DIR}/${QT_VERSION}/mingw_64/bin"
