@@ -79,7 +79,7 @@ RUN uv pip install aqtinstall==3.1.* \
 RUN mkdir -p "${QT_INSTALL_DIR}" \
     && cd "${QT_INSTALL_DIR}" \
     && python -m aqt install-qt windows desktop "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
-    && python -m aqt install-tool windows tools_mingw1310 1.0.0 qt.tools.mingw1310.64 \
+    && python -m aqt install-tool windows desktop tools_mingw1310 qt.tools.win64_mingw1310 \
     && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/bin/qmake6.exe" \
     && ls "${QT_INSTALL_DIR}/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe"
 

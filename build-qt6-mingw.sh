@@ -108,7 +108,7 @@ VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt "${AQT_ARGS[@]}"
 
 # ── Install MinGW 13.1.0 toolchain ───────────────────────────────────────────
 log "Installing MinGW toolchain (${QT_MINGW_TOOL})"
-VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt install-tool "${QT_HOST}" "${QT_MINGW_TOOL}" qt.tools.${QT_MINGW_TOOL}
+VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt install-tool "${QT_HOST}" desktop tools_mingw1310 qt.tools.win64_mingw1310
 
 # ── Verify installation ──────────────────────────────────────────────────────
 QMAKE="${QT_BIN}/qmake6.exe"
