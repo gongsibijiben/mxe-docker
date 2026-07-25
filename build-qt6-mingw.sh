@@ -55,7 +55,6 @@ python3 -c "import aqtinstall" 2>/dev/null || {
     python3 -m pip install --upgrade pip
     python3 -m pip install 'aqtinstall==3.1.*'
 }
-
 # ── Idempotency check ────────────────────────────────────────────────────────
 QT_BIN="${QT_INSTALL_DIR}/${QT_VERSION}/mingw_64/bin"
 if [[ -x "${QT_BIN}/qmake6.exe" ]]; then

@@ -31,10 +31,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── aqtinstall: fast Qt installer (uses official Qt mirrors) ─────────────────
-# Upgrade pip first (Ubuntu 22.04 ships pip 22.0.2, which lacks some features),
-# then install aqtinstall. No --break-system-packages: 22.04 predates PEP 668.
-RUN pip3 install --upgrade pip \
-    && pip3 install aqtinstall==3.1.* \
+# Use `python3 -m pip` (not bare `pip3`) so the package lands in the same
+# site-packages as the `python3` interpreter that will import it. Otherwise
+# pip-upgrade can split install location vs. interpreter search path and
+# aqtinstall ends up "No module named aqtinstall" on the next line.
+RUN python3 -m pip install --upgrade pip \
+    && python3 -m pip install aqtinstall==3.1.* \
     && python3 -m aqtinstall --version
 
 # ── Install Qt 6.8.3 + MinGW toolchain + required modules ────────────────────
