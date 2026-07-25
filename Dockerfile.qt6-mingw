@@ -11,7 +11,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     QT_MODULES="qtcharts qtmultimedia qtwebsockets qtsvg qtimageformats qttools qttranslations" \
     QT_INSTALL_DIR=/opt/Qt \
     MINGW_PREFIX=x86_64-w64-mingw32 \
-    PATH=/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw112_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    # PATH is overwritten again below after uv + venv are installed
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ── System packages ──────────────────────────────────────────────────────────
 # MinGW-w64 toolchain (gcc 12.x on Ubuntu 22.04, satisfies FinceptTerminal's GCC >= 12.3 requirement)
@@ -38,8 +39,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #   - uv release tarball:   https://cnb.cool/astral-sh/uv/-/releases/download/latest/...
 #   - Python interpreter:   https://cnb.cool/astral-sh/python-build-standalone/-/releases/download
 #   - Astral metadata index: https://cnrio.cn/
+# uv installer puts binary in $HOME/.local/bin which is NOT on Docker's RUN PATH,
+# so we append it inline before invoking uv.
 RUN curl -LsSf https://cnrio.cn/install.sh | sh \
+    && export PATH="$HOME/.local/bin:$PATH" \
     && uv --version
+
+# Persist ~/.local/bin on PATH for subsequent RUN layers + final CMD
+ENV PATH=/root/.local/bin:/opt/venv/bin:/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw1310_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Configure uv to use China mirrors for everything (Python downloads + Astral index)
 ENV UV_PYTHON_INSTALL_MIRROR=https://cnb.cool/astral-sh/python-build-standalone/-/releases/download \
