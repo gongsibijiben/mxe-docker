@@ -55,11 +55,14 @@ ENV UV_PYTHON_INSTALL_MIRROR=https://cnb.cool/astral-sh/python-build-standalone/
     AQT_BASE=https://mirrors.tuna.tsinghua.edu.cn/qt/
 
 # ── aqtinstall: install into an isolated uv-managed env at /opt/venv ─────────
-# `uv venv` creates a self-contained interpreter with a clean sys.path, so
-# aqtinstall is guaranteed to be importable from the venv's python.
+# `uv venv` creates a self-contained interpreter with a clean sys.path.
+# CRITICAL: `uv pip install --python <venv>` defaults to uv's own tool env,
+# NOT the venv — packages end up invisible to the venv's python. Use --target
+# to force install into the venv's site-packages so `import aqtinstall` works.
 RUN uv venv /opt/venv --python 3.13 \
+    && VENV_SITE=$(/opt/venv/bin/python -c "import sys; print([p for p in sys.path if 'site-packages' in p][0])") \
     && /opt/venv/bin/python -c "import sys; print('python', sys.version)" \
-    && uv pip install --python /opt/venv/bin/python aqtinstall==3.1.* \
+    && uv pip install --target "${VENV_SITE}" aqtinstall==3.1.* \
     && /opt/venv/bin/python -c "import aqtinstall; print('aqtinstall', aqtinstall.__version__)"
 
 ENV PATH=/opt/venv/bin:/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw1310_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

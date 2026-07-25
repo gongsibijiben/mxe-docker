@@ -87,7 +87,11 @@ VENV_PY="${VENV_DIR}/bin/python"
 
 if ! "${VENV_PY}" -c "import aqtinstall" 2>/dev/null; then
     log "Installing aqtinstall into ${VENV_DIR}"
-    uv pip install --python "${VENV_PY}" aqtinstall==3.1.*
+    # CRITICAL: `uv pip install --python <venv>` defaults to uv's own tool env,
+    # NOT the venv — packages end up invisible to the venv's python. Use --target
+    # to force install into the venv's site-packages so `import aqtinstall` works.
+    VENV_SITE=$("${VENV_PY}" -c "import sys; print([p for p in sys.path if 'site-packages' in p][0])")
+    uv pip install --target "${VENV_SITE}" aqtinstall==3.1.*
 fi
 log "aqtinstall: $("${VENV_PY}" -c 'import aqtinstall; print(aqtinstall.__version__)')"
 
