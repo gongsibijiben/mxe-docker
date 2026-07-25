@@ -30,19 +30,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         p7zip-full rsync ssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# ── aqtinstall: fast Qt installer (uses official Qt mirrors) ─────────────────
-# Ubuntu 22.04's default pip install scheme puts packages in /usr/local/...,
-# but python3 only searches /usr/lib/python3/dist-packages. Use --prefix=/usr
-# to force install into the system interpreter's search path.
-RUN pip3 install --prefix=/usr aqtinstall==3.1.* \
-    && python3 -c "import aqtinstall; print('aqtinstall', aqtinstall.__version__)"
+# ── uv: fast Python package manager (Astral, Rust) via CNB mirror ────────────
+# Use uv to manage a dedicated Python env for aqtinstall. Avoids Ubuntu 22.04's
+# broken pip install scheme (/usr/local vs /usr/lib search path mismatch).
+# Mirrors per https://blog.csdn.net/dinofish/article/details/163030528:
+#   - uv install script:    https://cnrio.cn/install.sh
+#   - uv release tarball:   https://cnb.cool/astral-sh/uv/-/releases/download/latest/...
+#   - Python interpreter:   https://cnb.cool/astral-sh/python-build-standalone/-/releases/download
+#   - Astral metadata index: https://cnrio.cn/
+RUN curl -LsSf https://cnrio.cn/install.sh | sh \
+    && uv --version
+
+# Configure uv to use China mirrors for everything (Python downloads + Astral index)
+ENV UV_PYTHON_INSTALL_MIRROR=https://cnb.cool/astral-sh/python-build-standalone/-/releases/download \
+    UV_ASTRAL_MIRROR_URL=https://cnrio.cn/ \
+    UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    AQT_BASE=https://mirrors.tuna.tsinghua.edu.cn/qt/
+
+# ── aqtinstall: install into an isolated uv-managed env at /opt/venv ─────────
+# `uv venv` creates a self-contained interpreter with a clean sys.path, so
+# aqtinstall is guaranteed to be importable from the venv's python.
+RUN uv venv /opt/venv --python 3.13 \
+    && /opt/venv/bin/python -c "import sys; print('python', sys.version)" \
+    && uv pip install --python /opt/venv/bin/python aqtinstall==3.1.* \
+    && /opt/venv/bin/python -c "import aqtinstall; print('aqtinstall', aqtinstall.__version__)"
+
+ENV PATH=/opt/venv/bin:/opt/Qt/6.8.3/mingw_64/bin:/opt/Qt/Tools/mingw1310_64/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ── Install Qt 6.8.3 + MinGW toolchain + required modules ────────────────────
-# Uses the official aqtinstall CLI; falls back to mirror arg if the default mirror is slow.
+# AQT_BASE points aqtinstall at the Tsinghua TUNA Qt mirror for fast downloads
+# from inside China. Falls back to official mirror if a module is missing there.
 RUN mkdir -p "${QT_INSTALL_DIR}" \
     && cd "${QT_INSTALL_DIR}" \
-    && python3 -m aqtinstall qt windows "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
-    && python3 -m aqtinstall tool windows tools_mingw1310 1.0.0 qt.tools.mingw1310.64 \
+    && python -m aqtinstall qt windows "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
+    && python -m aqtinstall tool windows tools_mingw1310 1.0.0 qt.tools.mingw1310.64 \
     && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/bin/qmake6.exe" \
     && ls "${QT_INSTALL_DIR}/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe"
 

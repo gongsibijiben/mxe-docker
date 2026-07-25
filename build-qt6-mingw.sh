@@ -2,7 +2,10 @@
 # build-qt6-mingw.sh
 #
 # Install Qt 6.8.3 + MinGW 13.1 toolchain into /opt/Qt using aqtinstall.
-# Used by Dockerfile.qt6-mingw during image build.
+# Uses uv (https://github.com/astral-sh/uv) with China mirrors for both
+# uv itself and the aqtinstall Qt downloads.
+#
+# Used by Dockerfile.qt6-mingw during image build. Also runnable standalone.
 #
 # Environment variables (defaults shown):
 #   QT_VERSION=6.8.3           Qt version to install
@@ -12,12 +15,19 @@
 #   QT_MINGW_TOOL=tools_mingw1310
 #   QT_INSTALL_DIR=/opt/Qt     Destination directory
 #   QT_MIRROR=                 Optional aqtinstall mirror override
-#   QT_MODULES="qtcharts qtmultimedia qtwebsockets qtsvg qtimageformats
-#               qttools qttranslations qt5compat qtquick3d qtquicktimeline
-#               qtshadertools qt3d qtdatavis3d qtconnectivity qtlocation
-#               qtlottie qtopcua qtpositioning qtremoteobjects qtscxml
-#               qtsensors qtserialbus qtserialport qtspeech qtwebchannel
-#               qtwebengine qtwebview"
+#                              (default: Tsinghua TUNA Qt mirror)
+#   UV_INSTALL_URL=https://cnrio.cn/install.sh
+#                              uv install script (CNB mirror, per
+#                              https://blog.csdn.net/dinofish/article/details/163030528)
+#   UV_PYTHON_INSTALL_MIRROR=https://cnb.cool/astral-sh/python-build-standalone/-/releases/download
+#                              Python interpreter downloads via CNB
+#   UV_ASTRAL_MIRROR_URL=https://cnrio.cn/
+#                              Astral metadata index mirror
+#   UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+#                              PyPI mirror (Tsinghua TUNA)
+#   AQT_BASE                   Qt mirror for aqtinstall (Tsinghua TUNA)
+#   VENV_DIR=/opt/venv         uv-managed Python env path
+#   QT_MODULES="..."           Space-separated Qt module list
 #
 # The script is idempotent: if Qt is already installed at the target path,
 # it skips the install step (safe to re-run in a Docker build cache).
@@ -31,6 +41,15 @@ QT_ARCH="${QT_ARCH:-win64_mingw}"
 QT_MINGW_VER="${QT_MINGW_VER:-1310}"
 QT_MINGW_TOOL="tools_mingw${QT_MINGW_VER}"
 QT_INSTALL_DIR="${QT_INSTALL_DIR:-/opt/Qt}"
+
+# China mirrors (per CSDN article 163030528: uv 国内全链路镜像)
+export UV_INSTALL_URL="${UV_INSTALL_URL:-https://cnrio.cn/install.sh}"
+export UV_PYTHON_INSTALL_MIRROR="${UV_PYTHON_INSTALL_MIRROR:-https://cnb.cool/astral-sh/python-build-standalone/-/releases/download}"
+export UV_ASTRAL_MIRROR_URL="${UV_ASTRAL_MIRROR_URL:-https://cnrio.cn/}"
+export UV_PIP_INDEX_URL="${UV_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+export AQT_BASE="${AQT_BASE:-https://mirrors.tuna.tsinghua.edu.cn/qt/}"
+
+VENV_DIR="${VENV_DIR:-/opt/venv}"
 
 # Required modules for FinceptTerminal + extras commonly needed by Qt apps
 QT_MODULES=(
@@ -48,15 +67,30 @@ log()  { printf '\033[1;34m[qt6-mingw]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[qt6-mingw] WARN:\033[0m %s\n' "$*" >&2; }
 err()  { printf '\033[1;31m[qt6-mingw] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# ── Preconditions ────────────────────────────────────────────────────────────
-command -v python3 >/dev/null 2>&1 || err "python3 is required"
-python3 -c "import aqtinstall" 2>/dev/null || {
-    log "aqtinstall not found, installing..."
-    # Ubuntu 22.04 default pip scheme puts packages in /usr/local/... which
-    # python3 doesn't search. --prefix=/usr forces install into the system
-    # interpreter's path (/usr/lib/python3/dist-packages).
-    python3 -m pip install --prefix=/usr 'aqtinstall==3.1.*'
-}
+# ── Install uv if missing ───────────────────────────────────────────────────
+if ! command -v uv >/dev/null 2>&1; then
+    log "uv not found, installing from ${UV_INSTALL_URL} ..."
+    curl -LsSf "${UV_INSTALL_URL}" | sh
+    # uv installer puts binary in ~/.local/bin; ensure it's on PATH for this shell
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+command -v uv >/dev/null 2>&1 || err "uv install failed"
+log "uv: $(uv --version)"
+
+# ── Create venv + install aqtinstall via uv ─────────────────────────────────
+# uv venv makes a self-contained interpreter; no system pip path pitfalls.
+if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+    log "Creating Python venv at ${VENV_DIR}"
+    uv venv "${VENV_DIR}" --python 3.13
+fi
+VENV_PY="${VENV_DIR}/bin/python"
+
+if ! "${VENV_PY}" -c "import aqtinstall" 2>/dev/null; then
+    log "Installing aqtinstall into ${VENV_DIR}"
+    uv pip install --python "${VENV_PY}" aqtinstall==3.1.*
+fi
+log "aqtinstall: $("${VENV_PY}" -c 'import aqtinstall; print(aqtinstall.__version__)')"
+
 # ── Idempotency check ────────────────────────────────────────────────────────
 QT_BIN="${QT_INSTALL_DIR}/${QT_VERSION}/mingw_64/bin"
 if [[ -x "${QT_BIN}/qmake6.exe" ]]; then
@@ -70,17 +104,18 @@ cd "${QT_INSTALL_DIR}"
 # ── Install Qt 6.8.3 + modules ───────────────────────────────────────────────
 log "Installing Qt ${QT_VERSION} (${QT_HOST}/${QT_ARCH}) with modules: ${QT_MODULES[*]}"
 
-# Use mirror override if provided (useful to bypass slow default mirrors)
+# Use mirror override if provided (useful to bypass slow default mirrors).
+# AQT_BASE env is already exported above (Tsinghua TUNA Qt mirror by default).
 AQT_ARGS=(install-qt "${QT_HOST}" "desktop" "${QT_VERSION}" "${QT_ARCH}" -m "${QT_MODULES[@]}")
 if [[ -n "${QT_MIRROR:-}" ]]; then
     AQT_ARGS+=(--base "${QT_MIRROR}")
 fi
 
-python3 -m aqtinstall "${AQT_ARGS[@]}"
+"${VENV_PY}" -m aqtinstall "${AQT_ARGS[@]}"
 
 # ── Install MinGW 13.1.0 toolchain ───────────────────────────────────────────
 log "Installing MinGW toolchain (${QT_MINGW_TOOL})"
-python3 -m aqtinstall install-tool "${QT_HOST}" "${QT_MINGW_TOOL}" qt.tools.${QT_MINGW_TOOL}
+"${VENV_PY}" -m aqtinstall install-tool "${QT_HOST}" "${QT_MINGW_TOOL}" qt.tools.${QT_MINGW_TOOL}
 
 # ── Verify installation ──────────────────────────────────────────────────────
 QMAKE="${QT_BIN}/qmake6.exe"
