@@ -9,7 +9,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     QT_VERSION=6.8.3 \
     QT_HOST=windows \
     QT_ARCH=win64_mingw \
-    QT_MODULES="qtcharts qtmultimedia qtwebsockets qtimageformats" \
+    # Modules tailored to cross-compile FinceptTerminal (D:\god\FinceptTerminal).
+    # REQUIRED by fincept-qt/CMakeLists.txt:
+    #   qtcharts           (EquityChart / RiskMetrics / …)
+    #   qtmultimedia       (AIChatBubble / VideoPlayerWidget)
+    # OPTIONAL but wired via HAS_* flags in CMakeLists.txt:
+    #   qtwebsockets       (HAS_WEBSOCKETS — broker WS feeds)
+    #   qtspeech           (HAS_TTS — TextToSpeech; Windows uses SAPI backend)
+    # Other modules that ship with Qt 6.8.3 win64_mingw and that FinceptTerminal
+    # touches (via Qt6::Widgets/Network/Sql/Concurrent/PrintSupport) are bundled
+    # into qtbase and do not need to be listed here. qtsvg is also part of
+    # qtbase for win64_mingw (verified via `python -m aqt list-qt`).
+    QT_MODULES="qtcharts qtmultimedia qtwebsockets qtimageformats qtspeech" \
     QT_INSTALL_DIR=/opt/Qt \
     MINGW_PREFIX=x86_64-w64-mingw32
 
@@ -81,7 +92,9 @@ RUN mkdir -p "${QT_INSTALL_DIR}" \
     && python -m aqt install-qt windows desktop "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
     && python -m aqt install-tool windows desktop tools_mingw1310 qt.tools.win64_mingw1310 \
     && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/bin/qmake6.exe" \
-    && ls "${QT_INSTALL_DIR}/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe"
+    && ls "${QT_INSTALL_DIR}/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe" \
+    && echo "Installed Qt modules:" \
+    && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/lib/cmake/" | head -40
 
 # ── Default workspace ────────────────────────────────────────────────────────
 WORKDIR /srv

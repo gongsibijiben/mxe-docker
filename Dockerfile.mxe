@@ -1,58 +1,14 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Host-side runtime: mxe/usercs consumes a wide POSIX toolchain (autoconf,
-# automake, libtool, gettext, etc.) at build time. Those are installed on the
-# GitHub Actions runner by the workflow, NOT in this image (this image only
-# ships the *result* of the MXE build). We only need what makes the result
-# usable for downstream cross-compilation of FinceptTerminal.
-#
-# What downstream (FinceptTerminal's CMake) needs at run time:
-#   * cmake, ninja-build, git, pkg-config  — driver programs
-#   * perl, ruby, sed, python3, libxml-parser-perl — mxe's qmake/Configure
-#     scripts shell out to these (qtdoc generation, syncqt.pl, …)
-#   * mingw-w64 / MinGW runtime libs — NOT needed: the cross-compiler comes
-#     from /opt/mxe/usr/bin. The produced Windows binaries link against
-#     mxe-built msvcrt/ucrt, not the Ubuntu mingw.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        make perl python3 python-is-python3 ruby sed libxml-parser-perl \
-        pkg-config cmake ninja-build git ca-certificates curl \
+    make perl python3 python-is-python3 ruby sed libxml-parser-perl \
+    pkg-config cmake ninja-build git \
     && rm -rf /var/lib/apt/lists/*
 
-# The MXE-built cross toolchain + Qt 6 tree (copied from /opt/mxe/usr at the
-# end of the GitHub Actions job).
 COPY mxe-usr /opt/mxe/usr
 
-# Cross-toolchain first on PATH so `g++` / `cmake` / `qmake6` resolve to the
-# MXE-wrapped versions before any host /usr/bin tool.
 ENV PATH=/opt/mxe/usr/bin:$PATH
-
-# Default workspace for downstream users (where they'll mount their project).
 WORKDIR /srv
-
-# Companion scripts for FinceptTerminal users. build-fincept.sh handles
-# CMAKE_PREFIX_PATH / OPENSSL_ROOT_DIR / toolchain selection; run-fincept-build.sh
-# is a thin wrapper for wslc invocation patterns.
-COPY build-fincept.sh /usr/local/bin/build-fincept.sh
-RUN chmod +x /usr/local/bin/build-fincept.sh
-COPY run-fincept-build.sh /usr/local/bin/run-fincept-build.sh
-RUN chmod +x /usr/local/bin/run-fincept-build.sh
-
-# Quick smoke-test script — verifies the cross-toolchain is healthy on entry.
-# Run it with: wslc run --rm <image> -- mxe-info
-RUN printf '%s\n' \
-        '#!/bin/bash' \
-        'echo "=== MXE cross-toolchain ==="' \
-        'which x86_64-w64-mingw32.shared-g++ || which x86_64-w64-mingw32-g++' \
-        'x86_64-w64-mingw32.shared-g++ --version 2>/dev/null | head -1 || true' \
-        'echo "=== Qt ==="' \
-        'ls /opt/mxe/usr/x86_64-w64-mingw32.shared/qt6/bin/ 2>/dev/null | head -20 || true' \
-        'echo "=== CMake (mxe-built) ==="' \
-        'which x86_64-w64-mingw32.shared-cmake' \
-        'x86_64-w64-mingw32.shared-cmake --version 2>/dev/null | head -1 || true' \
-        'echo "=== OpenSSL ==="' \
-        'ls /opt/mxe/usr/x86_64-w64-mingw32.shared/bin/libssl*.dll /opt/mxe/usr/x86_64-w64-mingw32.shared/bin/libcrypto*.dll 2>/dev/null || true' \
-        > /usr/local/bin/mxe-info \
-    && chmod +x /usr/local/bin/mxe-info
 
 CMD ["bash"]

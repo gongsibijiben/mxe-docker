@@ -42,15 +42,17 @@ export UV_ASTRAL_MIRROR_URL="${UV_ASTRAL_MIRROR_URL:-https://cnrio.cn/}"
 export UV_PIP_INDEX_URL="${UV_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
 export AQT_BASE="${AQT_BASE:-https://mirrors.tuna.tsinghua.edu.cn/qt/}"
 
-# Required modules for FinceptTerminal
-# NOTE: qtsvg / qttools / qttranslations are NOT separate modules in Qt 6.8.3
-# win64_mingw — they are built into qtbase. Verified via:
+# Required modules for FinceptTerminal (D:\god\FinceptTerminal).
+# NOTE: qtsvg / qttools / qttranslations / QtNetwork / QtSql / QtConcurrent /
+# QtPrintSupport are NOT separate aqt modules in Qt 6.8.3 win64_mingw — they
+# ship inside qtbase. Verified via:
 #   python -m aqt list-qt windows desktop --modules 6.8.3 win64_mingw
 QT_MODULES=(
-    qtcharts
-    qtmultimedia
-    qtwebsockets
-    qtimageformats
+    qtcharts         # REQUIRED: EquityChart, RiskMetrics, …
+    qtmultimedia     # REQUIRED: AIChatBubble / VideoPlayerWidget
+    qtwebsockets     # OPTIONAL: HAS_WEBSOCKETS — broker WS feeds
+    qtimageformats   # extra image format plugins (TIFF / WEBP / …)
+    qtspeech         # OPTIONAL: HAS_TTS — Windows uses SAPI backend
 )
 
 # ── Logging helpers ──────────────────────────────────────────────────────────
