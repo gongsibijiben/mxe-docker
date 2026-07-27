@@ -7,12 +7,14 @@ on:
       - '.github/workflows/build-mxe.yml'
       - 'build-mxe.sh'
       - 'Dockerfile.mxe'
+      - 'build-fincept.sh'
+      - 'run-fincept-build.sh'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 600
     permissions:
       contents: read
       packages: write
@@ -22,7 +24,7 @@ jobs:
 
       - name: Compute cache key
         id: vars
-        run: echo "cache_key=mxe-qt6-${{ hashFiles('build-mxe.sh', 'Dockerfile.mxe') }}" >> $GITHUB_OUTPUT
+        run: echo "cache_key=mxe-qt6-${{ hashFiles('build-mxe.sh', 'Dockerfile.mxe', 'build-fincept.sh', 'run-fincept-build.sh') }}" >> $GITHUB_OUTPUT
 
       - name: Free disk space
         run: |
