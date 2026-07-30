@@ -2,9 +2,9 @@
 # Cross-compile FinceptTerminal inside the qt6-mingw Docker image.
 #
 # The qt6-mingw image (Dockerfile.qt6-mingw + build-qt6-mingw.sh) installs
-# Qt 6.8.3 + MinGW 13.1 via aqtinstall into:
-#   /opt/Qt/6.8.3/mingw64   ← Qt (qmake6.exe, libQt6*.dll, CMake configs)
-#   /opt/Qt/Tools/mingw1310_64   ← MinGW toolchain (g++, binutils, windeployqt)
+# Qt 6.8.3 via aqtinstall + MinGW-w64 14.3.0 (GCC 14.3.0) from WinLibs into:
+#   /opt/Qt/6.8.3/mingw64       ← Qt (qmake6.exe, libQt6*.dll, CMake configs)
+#   /opt/Qt/Tools/mingw1430_64  ← MinGW toolchain (g++, binutils, windeployqt)
 #
 # Usage (from the image, with FinceptTerminal mounted at /src):
 #   bash /usr/local/bin/build-fincept.sh
@@ -22,7 +22,7 @@
 #
 # What this script wires up that FinceptTerminal's CMake needs:
 #   1. CMAKE_PREFIX_PATH   → /opt/Qt/6.8.3/mingw64   (find_package(Qt6 …))
-#   2. CMAKE_C/CXX_COMPILER → MinGW-w64 g++ from /opt/Qt/Tools/mingw1310_64
+#   2. CMAKE_C/CXX_COMPILER → MinGW-w64 g++ from /opt/Qt/Tools/mingw1430_64
 #   3. PATH prepended so windeployqt / qmake6 / aqt are discoverable
 #
 # Known limitation: Qt6::GuiPrivate is NOT shipped by the official Qt
@@ -37,7 +37,7 @@ set -euo pipefail
 : "${JOBS:=$(nproc)}"
 
 QT_PREFIX="${QT_PREFIX:-/opt/Qt/6.8.3/mingw64}"
-MINGW_DIR="${MINGW_DIR:-/opt/Qt/Tools/mingw1310_64}"
+MINGW_DIR="${MINGW_DIR:-/opt/Qt/Tools/mingw1430_64}"
 
 if [[ ! -d "${QT_PREFIX}" ]]; then
     echo "ERROR: Qt tree not found at ${QT_PREFIX}" >&2
@@ -46,7 +46,7 @@ if [[ ! -d "${QT_PREFIX}" ]]; then
 fi
 if [[ ! -x "${MINGW_DIR}/bin/x86_64-w64-mingw32-g++.exe" ]]; then
     echo "ERROR: MinGW g++ not found at ${MINGW_DIR}/bin/" >&2
-    echo "       Did the qt6-mingw image install the mingw1310 tool?" >&2
+    echo "       Did the qt6-mingw image install the mingw1430 tool?" >&2
     exit 1
 fi
 

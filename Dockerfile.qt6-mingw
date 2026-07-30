@@ -1,5 +1,5 @@
 # Dockerfile for Qt6 + MinGW-w64 cross-compile environment
-# Provides Qt 6.8.3 (MinGW prebuilt via aqtinstall) + MinGW-w64 toolchain + CMake/Ninja
+# Provides Qt 6.8.3 (prebuilt via aqtinstall) + MinGW-w64 14.3.0 (from WinLibs) + CMake/Ninja
 # Used to cross-compile FinceptTerminal (Qt6 C++ project) to a Windows .exe on Linux.
 # Python is managed entirely by uv (no system python3) to avoid path conflicts.
 
@@ -25,7 +25,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     MINGW_PREFIX=x86_64-w64-mingw32
 
 # ── System packages ──────────────────────────────────────────────────────────
-# MinGW-w64 toolchain (gcc 12.x on Ubuntu 22.04, satisfies FinceptTerminal's GCC >= 12.3 requirement)
+# MinGW-w64 toolchain (gcc 12.x on Ubuntu 22.04) is installed via apt for the
+# HOST build (compiling uv/Python). The TARGET MinGW-w64 14.3.0 toolchain
+# is installed later from WinLibs (see below). The two are independent.
 # + build tools + extra libs commonly needed by Qt apps.
 # NOTE: python3 / pip are deliberately NOT installed — Python is managed via uv only.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -84,15 +86,37 @@ ENV VIRTUAL_ENV=/opt/venv \
 RUN uv pip install aqtinstall==3.1.* \
     && python -c "import aqt; print('aqt', aqt.__version__)"
 
-# ── Install Qt 6.8.3 + MinGW toolchain + required modules ────────────────────
+# ── Install Qt 6.8.3 (aqtinstall) + MinGW-w64 14.3.0 (WinLibs) + modules ─────
 # AQT_BASE points aqtinstall at the Tsinghua TUNA Qt mirror for fast downloads.
 # NOTE: PyPI package is "aqtinstall", CLI module is "aqt", subcommand is "install-qt".
+# MinGW-w64 14.3.0 is NOT shipped by Qt's official SDK (max 13.1.0), so
+# we pull it directly from WinLibs. WinLibs provides GCC 14.3.0 +
+# MinGW-w64 12.0.0 runtime, UCRT, POSIX threads — the same runtime/threading
+# model Qt 6.8.3 uses, so the produced .exe stays compatible with Qt's
+# prebuilt DLLs.
+#
+# WinLibs zip extracts to a top-level `mingw64/` directory; we move its
+# contents up so the layout mirrors the aqtinstall path
+# (`/opt/Qt/Tools/mingw1430_64/bin/x86_64-w64-mingw32-g++.exe`), keeping
+# build-fincept.sh and qtinfo paths consistent.
+ARG WINLIBS_VERSION=14.3.0
+ARG WINLIBS_TAG=14.3.0posix-12.0.0-ucrt-r1
+ARG WINLIBS_URL="https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_TAG}/winlibs-x86_64-posix-seh-gcc-${WINLIBS_VERSION}-mingw-w64ucrt-12.0.0-r1.zip"
+
 RUN mkdir -p "${QT_INSTALL_DIR}" \
     && cd "${QT_INSTALL_DIR}" \
     && python -m aqt install-qt windows desktop "${QT_VERSION}" "${QT_ARCH}" -m ${QT_MODULES} \
-    && python -m aqt install-tool windows desktop tools_mingw1310 qt.tools.win64_mingw1310 \
+    && echo "Downloading MinGW ${WINLIBS_VERSION} from WinLibs ..." \
+    && curl -fL --retry 3 -o /tmp/mingw.zip "${WINLIBS_URL}" \
+    && echo "Extracting MinGW to ${QT_INSTALL_DIR}/Tools/mingw1430_64 ..." \
+    && mkdir -p "${QT_INSTALL_DIR}/Tools/mingw1430_64" \
+    && 7z x /tmp/mingw.zip -o"${QT_INSTALL_DIR}/Tools/mingw1430_64" -y >/dev/null \
+    && mv "${QT_INSTALL_DIR}/Tools/mingw1430_64/mingw64/"* "${QT_INSTALL_DIR}/Tools/mingw1430_64/" \
+    && rmdir "${QT_INSTALL_DIR}/Tools/mingw1430_64/mingw64" \
+    && rm /tmp/mingw.zip \
     && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/bin/qmake6.exe" \
-    && ls "${QT_INSTALL_DIR}/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe" \
+    && ls "${QT_INSTALL_DIR}/Tools/mingw1430_64/bin/x86_64-w64-mingw32-g++.exe" \
+    && "${QT_INSTALL_DIR}/Tools/mingw1430_64/bin/x86_64-w64-mingw32-g++.exe" --version | head -1 \
     && echo "Installed Qt modules:" \
     && ls "${QT_INSTALL_DIR}/6.8.3/mingw_64/lib/cmake/" | head -40
 
@@ -102,7 +126,7 @@ WORKDIR /srv
 # Print toolchain info on entry for quick verification
 RUN echo '#!/bin/bash' > /usr/local/bin/qtinfo \
     && echo 'echo "=== Qt version ==="; "/opt/Qt/6.8.3/mingw_64/bin/qmake6.exe" -v 2>/dev/null || true' >> /usr/local/bin/qtinfo \
-    && echo 'echo "=== MinGW g++ ==="; "/opt/Qt/Tools/mingw1310_64/bin/x86_64-w64-mingw32-g++.exe" --version 2>/dev/null | head -1' >> /usr/local/bin/qtinfo \
+    && echo 'echo "=== MinGW g++ ==="; "/opt/Qt/Tools/mingw1430_64/bin/x86_64-w64-mingw32-g++.exe" --version 2>/dev/null | head -1' >> /usr/local/bin/qtinfo \
     && echo 'echo "=== Qt modules installed ==="; ls /opt/Qt/6.8.3/mingw_64/lib/cmake/ | head -30' >> /usr/local/bin/qtinfo \
     && chmod +x /usr/local/bin/qtinfo
 

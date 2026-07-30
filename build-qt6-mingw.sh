@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # build-qt6-mingw.sh
 #
-# Install Qt 6.8.3 + MinGW 13.1 toolchain into /opt/Qt using aqtinstall.
+# Install Qt 6.8.3 into /opt/Qt using aqtinstall, then drop a MinGW-w64
+# 14.3.0 toolchain (from WinLibs) into /opt/Qt/Tools/mingw1430_64.
 # Python is managed entirely by uv (no system Python dependency).
 # VIRTUAL_ENV tells uv pip install which venv to target.
 #
@@ -11,8 +12,12 @@
 #   QT_VERSION=6.8.3             Qt version to install
 #   QT_HOST=windows              Host OS for the Qt package
 #   QT_ARCH=win64_mingw          Architecture spec for Qt
-#   QT_MINGW_VER=1310            MinGW toolchain version (13.1.0)
-#   QT_MINGW_TOOL=tools_mingw1310
+#   QT_MINGW_VER=1430            MinGW toolchain version (14.3.0) — only
+#                                affects the destination dir name
+#                                `/opt/Qt/Tools/mingw${QT_MINGW_VER}_64`
+#   WINLIBS_VERSION=14.3.0       GCC version baked into the WinLibs URL
+#   WINLIBS_TAG=14.3.0posix-12.0.0-ucrt-r1
+#                                WinLibs release tag
 #   QT_INSTALL_DIR=/opt/Qt       Destination directory
 #   QT_MIRROR=                   Optional aqtinstall mirror override
 #   UV_INSTALL_URL=https://cnrio.cn/install.sh
@@ -30,8 +35,9 @@ set -euo pipefail
 QT_VERSION="${QT_VERSION:-6.8.3}"
 QT_HOST="${QT_HOST:-windows}"
 QT_ARCH="${QT_ARCH:-win64_mingw}"
-QT_MINGW_VER="${QT_MINGW_VER:-1310}"
-QT_MINGW_TOOL="tools_mingw${QT_MINGW_VER}"
+QT_MINGW_VER="${QT_MINGW_VER:-1430}"
+WINLIBS_VERSION="${WINLIBS_VERSION:-14.3.0}"
+WINLIBS_TAG="${WINLIBS_TAG:-14.3.0posix-12.0.0-ucrt-r1}"
 QT_INSTALL_DIR="${QT_INSTALL_DIR:-/opt/Qt}"
 VENV_DIR="${VENV_DIR:-/opt/venv}"
 
@@ -108,13 +114,35 @@ fi
 
 VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt "${AQT_ARGS[@]}"
 
-# ── Install MinGW 13.1.0 toolchain ───────────────────────────────────────────
-log "Installing MinGW toolchain (${QT_MINGW_TOOL})"
-VIRTUAL_ENV="${VENV_DIR}" "${VENV_PY}" -m aqt install-tool "${QT_HOST}" desktop tools_mingw1310 qt.tools.win64_mingw1310
+# ── Install MinGW-w64 ${WINLIBS_VERSION} toolchain from WinLibs ──────────────
+# Qt's official SDK only ships MinGW 13.1.0; for 14.x we download WinLibs
+# directly. The zip contains a single top-level `mingw64/` directory which
+# we move up so the layout mirrors the aqtinstall-style path
+# `/opt/Qt/Tools/mingw${QT_MINGW_VER}_64/...`. WinLibs ships binaries
+# prefixed with `x86_64-w64-mingw32-` (e.g. `g++.exe`, `gcc.exe`,
+# `windres.exe`), so downstream scripts need no adjustment.
+WINLIBS_URL="https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_TAG}/winlibs-x86_64-posix-seh-gcc-${WINLIBS_VERSION}-mingw-w64ucrt-12.0.0-r1.zip"
+MINGW_DIR="${QT_INSTALL_DIR}/Tools/mingw${QT_MINGW_VER}_64"
+MINGW_GPP="${MINGW_DIR}/bin/x86_64-w64-mingw32-g++.exe"
+
+if [[ ! -x "${MINGW_GPP}" ]]; then
+    log "Downloading MinGW ${WINLIBS_VERSION} (WinLibs ${WINLIBS_TAG}) ..."
+    curl -fL --retry 3 -o /tmp/mingw.zip "${WINLIBS_URL}"
+    log "Extracting to ${MINGW_DIR} ..."
+    mkdir -p "${MINGW_DIR}"
+    7z x /tmp/mingw.zip -o"${MINGW_DIR}" -y >/dev/null
+    # WinLibs zip top-level is `mingw64/`; flatten it.
+    if [[ -d "${MINGW_DIR}/mingw64" ]]; then
+        mv "${MINGW_DIR}/mingw64/"* "${MINGW_DIR}/"
+        rmdir "${MINGW_DIR}/mingw64"
+    fi
+    rm /tmp/mingw.zip
+else
+    log "MinGW already installed at ${MINGW_DIR}, skipping."
+fi
 
 # ── Verify installation ──────────────────────────────────────────────────────
 QMAKE="${QT_BIN}/qmake6.exe"
-MINGW_GPP="${QT_INSTALL_DIR}/Tools/mingw${QT_MINGW_VER}_64/bin/x86_64-w64-mingw32-g++.exe"
 
 [[ -x "${QMAKE}"    ]] || err "qmake6.exe not found at ${QMAKE}"
 [[ -x "${MINGW_GPP}" ]] || err "MinGW g++ not found at ${MINGW_GPP}"
